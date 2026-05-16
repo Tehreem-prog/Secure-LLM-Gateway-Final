@@ -1,0 +1,90 @@
+# ============================================================
+# gateway_config.yaml
+# ALL configurable thresholds live here.
+# You can tune these without touching any Python file.
+# ============================================================
+
+# --- Injection / Risk Thresholds ---
+# WHAT IS rule_score?
+#   A number 0.0 – 1.0 produced by the Rule-Based Detector.
+#   It counts how many dangerous keywords appear in the text.
+#   Mid-lab used ONLY this. Final adds semantic_score on top.
+rule_block_threshold: 0.5       # if rule_score >= this → trigger
+rule_keyword_weight: 0.6        # score added per keyword match
+
+# WHAT IS semantic_score?
+#   A number 0.0 – 1.0 from the ML model (TF-IDF + LR).
+#   NEW in Final Lab — catches paraphrased / multilingual attacks
+#   that contain no exact keywords.
+semantic_block_threshold: 0.55  # if semantic_score >= this → trigger
+
+# WHAT IS final_risk?
+#   A combined score that merges rule + semantic + PII signals.
+#   Formula: final_risk = max(rule_score, semantic_score) + pii_weight + secret_weight
+#   If final_risk >= final_block_threshold → BLOCK
+final_block_threshold: 0.60     # overall risk cutoff
+
+# Weights added to final_risk for PII and secrets
+pii_risk_weight: 0.15           # added when PII is found
+secret_risk_weight: 0.25        # added when API keys / passwords found
+
+# --- PII Detection ---
+# WHAT IS pii_confidence_threshold?
+#   Presidio assigns a confidence score to every entity it finds.
+#   We ignore entities below this threshold to reduce false positives.
+pii_confidence_threshold: 0.40
+
+# Confidence scores for our CUSTOM recognizers
+cnic_pattern_score: 0.85
+student_id_score: 0.88
+api_key_score: 0.90
+pak_phone_score: 0.82
+
+# --- Entities to scan for ---
+entities_to_scan:
+  - PAK_CNIC           # NEW custom: Pakistani ID card (35202-1234567-1)
+  - STUDENT_ID         # NEW custom: CUI student ID (FA21-BCS-123)
+  - PAK_PHONE          # NEW custom: Pakistani mobile (03XX-XXXXXXX)
+  - API_KEY            # NEW custom: API keys (sk-... / Bearer ...)
+  - EMAIL_ADDRESS      # Built-in Presidio
+  - PHONE_NUMBER       # Built-in Presidio
+  - PERSON             # Built-in Presidio
+
+# --- Language Detection ---
+# Supported languages for multilingual attack detection
+# NEW in Final Lab — mid only handled English
+supported_languages:
+  - en   # English
+  - ur   # Urdu
+  - ko   # Korean (used in assignment examples)
+  - ar   # Arabic
+
+# --- Injection Keywords (Rule-Based) ---
+# These are the SAME keywords from the mid-lab (kept for baseline comparison)
+# The semantic detector catches attacks that DON'T use these exact words.
+injection_keywords:
+  # English
+  - "ignore previous instructions"
+  - "ignore all previous"
+  - "system prompt"
+  - "as an admin"
+  - "bypass"
+  - "disregard your instructions"
+  - "forget everything"
+  - "you are now"
+  - "jailbreak"
+  - "reveal the system"
+  - "show the hidden"
+  - "pretend you are"
+  - "unrestricted assistant"
+  - "override your policy"
+  - "print any api keys"
+  - "passwords stored"
+  # Urdu (transliterated — common patterns)
+  - "ہدایات کو نظر انداز"
+  - "سسٹم پرامپٹ"
+  - "پچھلی ہدایات"
+  # Korean
+  - "이전 지침을 무시"
+  - "시스템 프롬프트"
+  - "무시하고"

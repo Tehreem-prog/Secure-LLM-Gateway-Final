@@ -1,0 +1,25 @@
+# Requirements for Final Lab — LLM Security Gateway
+# Install with: pip install -r requirements.txt
+
+# Web framework (same as mid-lab)
+fastapi
+uvicorn
+
+# PII detection (same as mid-lab)
+presidio-analyzer
+presidio-anonymizer
+spacy
+
+# NEW IN FINAL LAB:
+# ML-based semantic detector
+scikit-learn
+
+# NEW IN FINAL LAB:
+# Language detection
+langdetect
+
+# YAML config file parsing
+pyyaml
+
+# Pydantic for request validation
+pydantic
