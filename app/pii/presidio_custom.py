@@ -1,22 +1,5 @@
 # ============================================================
 # app/pii/presidio_custom.py
-# ─── IMPROVED FROM MID-LAB ──────────────────────────────────
-#
-# WHAT CHANGED FROM MID-LAB:
-#   Mid-lab had 4 Presidio customizations (CNIC + composite + context + threshold)
-#   Final-lab adds:
-#     - STUDENT_ID recognizer (FA21-BCS-123 format) ← NEW
-#     - PAK_PHONE recognizer (03XX-XXXXXXX format)  ← NEW
-#     - API_KEY recognizer (sk-..., Bearer ...)      ← NEW
-#     - Improved composite: student ID + email       ← NEW
-#     - Better context words for each entity         ← IMPROVED
-#
-# CONCEPTS (for viva):
-#   PatternRecognizer: Presidio class that detects entities using REGEX
-#   Context words: Words near an entity that BOOST its confidence score
-#   Composite entity: Detecting TWO entity types that appear together
-#   Anonymization: Replacing detected values with <PLACEHOLDER> labels
-#   score_threshold: Minimum confidence to report an entity (calibration)
 # ============================================================
 
 from presidio_analyzer import AnalyzerEngine, PatternRecognizer, Pattern
@@ -45,10 +28,6 @@ cnic_recognizer = PatternRecognizer(
         regex=r"\b\d{5}-\d{7}-\d{1}\b",
         score=CNIC_SCORE,
     )],
-    # CUSTOMIZATION 2 (Context-Aware Scoring):
-    # If any of these words appear NEAR the CNIC number,
-    # Presidio boosts the confidence score.
-    # This reduces false positives (random 5-7-1 digit patterns).
     context=["cnic", "identity", "id card", "national id", "identification", "شناختی", "قومی شناخت"],
 )
 
@@ -61,11 +40,9 @@ student_id_recognizer = PatternRecognizer(
     supported_entity="STUDENT_ID",
     patterns=[Pattern(
         name="student_reg_id",
-        # Matches CUI-style IDs: 2 letters + 2 digits + hyphen + 3 letters + hyphen + 3 digits
         regex=r"\b[A-Z]{2}\d{2}-[A-Z]{2,4}-\d{3,4}\b",
         score=STU_SCORE,
     )],
-    # Context words that indicate this is a student ID
     context=["student id", "registration", "reg no", "roll no", "student number", "reg"],
 )
 
@@ -79,17 +56,16 @@ api_key_recognizer = PatternRecognizer(
     patterns=[
         Pattern(
             name="openai_style_key",
-            regex=r"\bsk-[A-Za-z0-9]{20,}\b",  # OpenAI-style: sk-...
+            regex=r"\bsk-[A-Za-z0-9]{20,}\b",
             score=API_SCORE,
         ),
         Pattern(
             name="bearer_token",
-            regex=r"\bBearer\s+[A-Za-z0-9\-_\.]{20,}\b",  # Bearer token
+            regex=r"\bBearer\s+[A-Za-z0-9\-_\.]{20,}\b",
             score=API_SCORE,
         ),
         Pattern(
             name="generic_api_key",
-            # Matches patterns like: api_key=XXXX or apiKey: XXXX
             regex=r"\b(?:api[_\-]?key|API[_\-]?KEY)\s*[:=]\s*[A-Za-z0-9\-_]{10,}\b",
             score=0.85,
         ),
@@ -107,13 +83,13 @@ pak_phone_recognizer = PatternRecognizer(
     patterns=[
         Pattern(
             name="pak_mobile_dashed",
-            regex=r"\b03\d{2}-\d{7}\b",   # 03XX-XXXXXXX
+            regex=r"\b03\d{2}-\d{7}\b",
             score=PHONE_SCORE,
         ),
         Pattern(
             name="pak_mobile_plain",
-            regex=r"\b03\d{9}\b",          # 03XXXXXXXXX (no dash)
-            score=PHONE_SCORE - 0.05,      # slightly lower confidence
+            regex=r"\b03\d{9}\b",
+            score=PHONE_SCORE - 0.05,
         ),
     ],
     context=["phone", "mobile", "call", "contact", "number", "whatsapp", "فون", "موبائل"],
@@ -122,13 +98,11 @@ pak_phone_recognizer = PatternRecognizer(
 
 # ══════════════════════════════════════════════════════════════
 # CUSTOMIZATION 6: Composite Entity — Student ID + Email ← NEW
-# Detects when a student ID and email appear together (high-risk combo)
 # ══════════════════════════════════════════════════════════════
 composite_student_recognizer = PatternRecognizer(
     supported_entity="COMPOSITE_STUDENT_PII",
     patterns=[Pattern(
         name="student_id_plus_email",
-        # Matches: "FA21-BCS-123 ... ali@example.com" within ~80 chars
         regex=r"[A-Z]{2}\d{2}-[A-Z]{2,4}-\d{3,4}.{0,80}[a-zA-Z0-9_.+-]+@[a-zA-Z0-9-]+\.[a-zA-Z]{2,}",
         score=0.95,
     )],
@@ -140,7 +114,6 @@ analyzer  = AnalyzerEngine()
 anonymizer = AnonymizerEngine()
 
 # Register all custom recognizers
-# ORDER MATTERS: more specific recognizers should be added first
 analyzer.registry.add_recognizer(api_key_recognizer)
 analyzer.registry.add_recognizer(student_id_recognizer)
 analyzer.registry.add_recognizer(pak_phone_recognizer)
@@ -148,51 +121,37 @@ analyzer.registry.add_recognizer(cnic_recognizer)
 analyzer.registry.add_recognizer(composite_student_recognizer)
 
 
-# ── Detection Function ───────────────────────────────────────
+# ── Detection Function (UPDATED AND ALIGNED) ──────────────────
 
-def detect_pii(user_input: str) -> list:
+def detect_pii(user_input: str, entities: list = None) -> list:
     """
     Run Presidio on the input text and return detected PII entities.
 
-    CUSTOMIZATION: Confidence Calibration (score_threshold)
-    Only entities with confidence >= PII_THRESHOLD are returned.
-    This is the key calibration step — prevents noisy false positives.
-
-    Returns: list of RecognizerResult objects
-    Each has: .entity_type, .start, .end, .score
+    ALIGNMENT FIX: Added the optional `entities` parameter to accept 
+    dynamically altered lists from main.py (such as removing Urdu PERSON models).
     """
-    all_entities = ENTITIES + ["COMPOSITE_STUDENT_PII"]
+    # If no specialized list is passed down, fall back to default configurations
+    if entities is None:
+        entities = ENTITIES.copy()
+        
+    # Ensure the high-level composite tracker is always included in the scan matrix
+    if "COMPOSITE_STUDENT_PII" not in entities:
+        entities.append("COMPOSITE_STUDENT_PII")
 
     results = analyzer.analyze(
         text=user_input,
         language="en",
-        entities=all_entities,
-        score_threshold=PII_THRESHOLD,   # Calibration threshold
+        entities=entities,              # Uses the dynamically customized scan matrix
+        score_threshold=PII_THRESHOLD,  # Calibration threshold
     )
     return results
-
-
 def anonymize_text(user_input: str, results: list) -> str:
-    """
-    Replace detected PII with clear placeholder labels.
-
-    Examples:
-      ali.khan@example.com     → <EMAIL_ADDRESS>
-      35202-1234567-1          → <PAK_CNIC>
-      FA21-BCS-123             → <STUDENT_ID>
-      sk-abcdef123456789012    → <API_KEY>
-      0312-3456789             → <PAK_PHONE>
-
-    VIVA TIP: The anonymizer uses the start/end positions from
-    the analyzer results to know WHERE to replace in the string.
-    """
     if not results:
         return user_input
 
     anonymized = anonymizer.anonymize(
         text=user_input,
         analyzer_results=results,
-        # Custom operators define HOW each entity type is replaced
         operators={
             "PAK_CNIC":             OperatorConfig("replace", {"new_value": "<CNIC>"}),
             "STUDENT_ID":           OperatorConfig("replace", {"new_value": "<STUDENT_ID>"}),
@@ -224,10 +183,5 @@ def pii_results_to_dict(results: list) -> list[dict]:
 
 
 def check_for_secrets(results: list) -> bool:
-    """
-    Returns True if detected PII includes high-sensitivity secrets
-    (API keys or composite blocks).
-    Used by the policy engine to add extra risk weight.
-    """
     sensitive_types = {"API_KEY", "COMPOSITE_STUDENT_PII"}
     return any(r.entity_type in sensitive_types for r in results)
