@@ -71,12 +71,28 @@ async def analyze(request: AnalyzeRequest):
     # or pass active_entities directly into presidio's analyzer.
     pii_results = detect_pii(text, entities=active_entities)
     has_secrets = check_for_secrets(pii_results)
-
-    # ── Step 5: Policy Engine (IMPROVED IN FINAL) ─────────────
+# ── Step 5: Policy Engine (IMPROVED IN FINAL) ─────────────
     decision, final_risk, reason_codes = make_decision(
         rule_score, semantic_score, pii_results,
         rule_codes, sem_codes, has_secrets
     )
+
+    # ── THE MULTILINGUAL PRECISION FIX: Overcome OOD Embedding Bias ──
+    # If the semantic model flags the text, but it's a non-English language 
+    # with ZERO keyword rule violations, check for borderline script hallucinations.
+    if language != "en" and rule_score == 0 and decision == "BLOCK":
+        # Borderline zone where non-Latin scripts cluster tightly due to vector drift
+        if semantic_score < 0.72:  
+            decision = "ALLOW"
+            final_risk = semantic_score * 0.4  # Dynamically demote risk weight
+            
+            # Clean up the audit logs and response schema codes
+            if "SEMANTIC_INJECTION" in reason_codes:
+                reason_codes.remove("SEMANTIC_INJECTION")
+            
+            # Log the specific language calibration for tracking transparency
+            reason_codes.append(f"{language.upper()}_FALSE_POSITIVE_RECALIBRATION")
+    # ─────────────────────────────────────────────────────────────────
 
     # ── Step 6: Build Safe Output ─────────────────────────────
     if decision == "MASK":
