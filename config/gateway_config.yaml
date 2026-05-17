@@ -25,7 +25,7 @@ semantic_block_threshold: 0.55  # if semantic_score >= this → trigger
 final_block_threshold: 0.60     # overall risk cutoff
 
 # Weights added to final_risk for PII and secrets
-pii_risk_weight: 0.15           # added when PII is found
+pii_risk_weight: 0.10           # added when PII is found
 secret_risk_weight: 0.25        # added when API keys / passwords found
 
 # --- PII Detection ---
