@@ -1,24 +1,3 @@
-# ============================================================
-# app/main.py  —  FastAPI Entry Point
-# ─── IMPROVED FROM MID-LAB ──────────────────────────────────
-#
-# WHAT CHANGED FROM MID-LAB:
-#   Mid-lab: 1 endpoint (/secure-chat), no language detection,
-#            no audit log, no semantic score in response
-#   Final:   /analyze endpoint (structured JSON per assignment spec)
-#            + language detection
-#            + semantic_score in response
-#            + audit logging
-#            + /health endpoint
-#            + /stats endpoint
-#            + proper reason_codes
-#
-# PIPELINE (NEW vs MID):
-#   Mid:   Input → Rule Detect → Presidio → Policy → Response
-#   Final: Input → Language Detect → Rule Detect → Semantic Detect
-#                → Presidio → Policy Engine → Audit Log → Response
-# ============================================================
-
 from fastapi import FastAPI
 from pydantic import BaseModel
 import time
@@ -31,6 +10,7 @@ from app.pii.presidio_custom         import detect_pii, anonymize_text, pii_resu
 from app.policy.policy_engine        import make_decision
 from app.utils.language              import detect_language, is_mixed_language
 from app.utils.logging               import write_audit_log
+from app.utils.config_loader         import CFG  # Imported to read default configuration lists
 
 
 # ── App Setup ────────────────────────────────────────────────
@@ -57,20 +37,6 @@ class AnalyzeRequest(BaseModel):
 # ══════════════════════════════════════════════════════════════
 @app.post("/analyze")
 async def analyze(request: AnalyzeRequest):
-    """
-    Full security pipeline. Returns structured JSON per assignment spec:
-    {
-      "input_id", "language", "rule_score", "semantic_score",
-      "pii_entities", "final_risk", "decision",
-      "safe_text", "reason_codes", "latency_ms"
-    }
-
-    DEMO SCRIPT (say this during viva):
-      "I send any text to /analyze. It first detects the language,
-       then runs rule-based AND semantic detectors in parallel,
-       then Presidio checks for PII, the policy engine combines
-       all scores into a final_risk, and the audit log records everything."
-    """
     start = time.time()
 
     # Generate input_id if not provided
@@ -91,8 +57,19 @@ async def analyze(request: AnalyzeRequest):
     # ── Step 3: Semantic / ML Detection (NEW IN FINAL) ────────
     semantic_score, sem_codes = calculate_semantic_score(text)
 
-    # ── Step 4: PII Detection (EXPANDED IN FINAL) ─────────────
-    pii_results = detect_pii(text)
+    # ── Step 4: PII Detection with Language Calibration ──────
+    # VIVA FIX: Extract scanned entities from your gateway_config.yaml file
+    active_entities = CFG.get("entities_to_scan", []).copy()
+    
+    # If the text is Urdu, remove 'PERSON' dynamically to eliminate the 
+    # out-of-distribution spaCy model hallucination on verb phrases like 'کریں'
+    if language == "ur" and "PERSON" in active_entities:
+        active_entities.remove("PERSON")
+
+    # Pass the calibrated entity array to your detection function
+    # Note: ensure your detect_pii function in presidio_custom.py accepts an entities list parameter if customized,
+    # or pass active_entities directly into presidio's analyzer.
+    pii_results = detect_pii(text, entities=active_entities)
     has_secrets = check_for_secrets(pii_results)
 
     # ── Step 5: Policy Engine (IMPROVED IN FINAL) ─────────────
@@ -135,10 +112,6 @@ async def analyze(request: AnalyzeRequest):
 # ══════════════════════════════════════════════════════════════
 @app.get("/health")
 def health():
-    """
-    Quick health check. Also shows model info for demo purposes.
-    Visit http://127.0.0.1:8000/health in the browser.
-    """
     return {
         "status": "Gateway Online ✅",
         "version": "2.0 — Final Lab",
@@ -156,10 +129,6 @@ def health():
 # ══════════════════════════════════════════════════════════════
 @app.get("/stats")
 def stats():
-    """
-    Read the audit log and show aggregated statistics.
-    Useful for the demo: "Let me show you the stats after testing."
-    """
     import json, os
     log_path = os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
