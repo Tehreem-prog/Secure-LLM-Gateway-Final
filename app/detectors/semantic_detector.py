@@ -163,12 +163,12 @@ TRAINING_TEXTS = [
     "Explain the system architecture of a web application.",
     "How do I design a good system for managing tasks?",
 ]
-
 TRAINING_LABELS = [
     # Direct injections (13)
     1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     # Polite extraction (26)
-    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
+    1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,
     # Paraphrased (8)
     1, 1, 1, 1, 1, 1, 1, 1,
     # Urdu (4)
@@ -179,11 +179,11 @@ TRAINING_LABELS = [
     1, 1, 1,
     # Jailbreak/researcher framing (4)
     1, 1, 1, 1,
-    # Benign (35)
+    # Benign (34)
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    0, 0, 0, 0, 0,
+    0, 0, 0, 0,
 ]
 
 # ── Verify label count matches text count ─────────────────────
